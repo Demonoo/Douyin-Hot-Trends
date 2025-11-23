@@ -1,13 +1,15 @@
-
 import { TrendItem } from '../types';
 
 const DIRECT_API_URL = 'https://aweme-hl.snssdk.com/aweme/v1/hot/search/list/?detail_list=1';
 
-// CORS Proxies to bypass browser restrictions
-// We use a rotation strategy to ensure high availability
+// CORS Proxies optimized for global access including China
 const PROXY_GATEWAYS = [
-  (target: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`,
-  (target: string) => `https://corsproxy.io/?${encodeURIComponent(target)}`
+  // 1. CodeTabs - Very reliable for JSON data, often accessible in CN
+  (target: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(target)}`,
+  // 2. CorsProxy.io - Fast direct pipe
+  (target: string) => `https://corsproxy.io/?${encodeURIComponent(target)}`,
+  // 3. AllOrigins - Fallback
+  (target: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`
 ];
 
 export const fetchDouyinTrends = async (): Promise<{ trends: TrendItem[], isMock: boolean }> => {
@@ -15,8 +17,6 @@ export const fetchDouyinTrends = async (): Promise<{ trends: TrendItem[], isMock
   // Append timestamp to force fresh data from upstream API
   const targetUrl = `${DIRECT_API_URL}&_t=${timestamp}`;
   
-  let lastError: any;
-
   // Try proxies sequentially
   for (const createProxyUrl of PROXY_GATEWAYS) {
     try {
@@ -27,10 +27,20 @@ export const fetchDouyinTrends = async (): Promise<{ trends: TrendItem[], isMock
         ? `${proxyUrl}&disableCache=true` 
         : proxyUrl;
 
-      const response = await fetch(finalUrl);
+      // Set a strict timeout to fail fast and switch proxies
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout
+
+      const response = await fetch(finalUrl, { 
+        signal: controller.signal,
+        headers: {
+            'Accept': 'application/json'
+        }
+      });
+      clearTimeout(timeoutId);
       
       if (!response.ok) {
-        throw new Error(`Proxy response error: ${response.status}`);
+        continue; 
       }
 
       const data = await response.json();
@@ -52,12 +62,10 @@ export const fetchDouyinTrends = async (): Promise<{ trends: TrendItem[], isMock
       }
     } catch (error) {
       console.warn(`Proxy attempt failed, trying next...`, error);
-      lastError = error;
       continue; // Try next proxy
     }
   }
 
   // If we reach here, all proxies failed.
-  // CRITICAL: Do NOT return mock data. Throw error to let UI handle it.
-  throw new Error("无法连接到抖音热榜服务器，请检查网络或稍后重试。");
+  throw new Error("连接失败：无法从任何线路获取数据。请检查网络连接或尝试开启/关闭 VPN。");
 };
