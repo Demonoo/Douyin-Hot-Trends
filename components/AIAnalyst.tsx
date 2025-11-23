@@ -1,18 +1,20 @@
+
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Bot, Sparkles, Loader2 } from 'lucide-react';
+import { Send, Bot, Sparkles, Loader2, Key } from 'lucide-react';
 import { Message, TrendItem } from '../types';
-import { analyzeTrendsWithAI } from '../services/geminiService';
+import { analyzeTrendsWithAI } from '../services/deepseekService';
 
 interface AIAnalystProps {
     trends: TrendItem[];
+    onRequestKey: () => void;
 }
 
-const AIAnalyst: React.FC<AIAnalystProps> = ({ trends }) => {
+const AIAnalyst: React.FC<AIAnalystProps> = ({ trends, onRequestKey }) => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: '1',
       role: 'model',
-      text: 'Hello! I am your Douyin Trend Analyst. I have access to the current top 50 hot search list. \n\nAsk me to:\n- Summarize the current top topics\n- Find marketing opportunities for your brand\n- Explain why a specific topic is viral',
+      text: '你好！我是由 DeepSeek 驱动的趋势分析助手。我已经获取了当前 Top 50 的热搜榜单。\n\n你可以让我：\n- 总结当前的热门话题\n- 寻找品牌营销机会\n- 解释某个话题为什么会火',
       timestamp: Date.now()
     }
   ]);
@@ -44,6 +46,19 @@ const AIAnalyst: React.FC<AIAnalystProps> = ({ trends }) => {
 
     const responseText = await analyzeTrendsWithAI(trends, userMsg.text);
 
+    if (responseText === "MISSING_KEY") {
+        const errorMsg: Message = {
+            id: (Date.now() + 1).toString(),
+            role: 'model',
+            text: "访问受限：需要输入 DeepSeek API Key 才能进行分析。",
+            timestamp: Date.now()
+        };
+        setMessages(prev => [...prev, errorMsg]);
+        setIsLoading(false);
+        onRequestKey(); // Trigger the modal
+        return;
+    }
+
     const aiMsg: Message = {
       id: (Date.now() + 1).toString(),
       role: 'model',
@@ -67,7 +82,7 @@ const AIAnalyst: React.FC<AIAnalystProps> = ({ trends }) => {
        <div className="text-center mb-4">
             <h2 className="text-2xl font-bold text-white flex items-center justify-center gap-2">
                 <Sparkles className="text-douyin-cyan w-6 h-6" />
-                AI Insight Engine
+                DeepSeek 洞察引擎
             </h2>
        </div>
       
@@ -90,12 +105,20 @@ const AIAnalyst: React.FC<AIAnalystProps> = ({ trends }) => {
                 {msg.role === 'model' && (
                    <div className="flex items-center mb-3 opacity-50 text-xs font-bold uppercase tracking-wide text-douyin-cyan">
                      <Bot className="w-3 h-3 mr-2" />
-                     Analyst
+                     DeepSeek V3
                    </div>
                 )}
                 <div className="prose prose-invert prose-sm max-w-none leading-relaxed whitespace-pre-wrap">
                     {msg.text}
                 </div>
+                {msg.text.includes("访问受限") && (
+                    <button 
+                        onClick={onRequestKey}
+                        className="mt-4 flex items-center px-3 py-1.5 bg-white/10 hover:bg-white/20 rounded text-xs font-bold text-douyin-cyan transition-colors"
+                    >
+                        <Key className="w-3 h-3 mr-2" /> 输入 API Key
+                    </button>
+                )}
               </div>
             </div>
           ))}
@@ -103,7 +126,7 @@ const AIAnalyst: React.FC<AIAnalystProps> = ({ trends }) => {
              <div className="flex justify-start w-full">
                <div className="bg-white/5 rounded-2xl rounded-tl-none p-4 border border-white/10 flex items-center space-x-3">
                  <Loader2 className="w-5 h-5 text-douyin-cyan animate-spin" />
-                 <span className="text-slate-400 text-sm">Analyzing live data patterns...</span>
+                 <span className="text-slate-400 text-sm">DeepSeek 正在思考中...</span>
                </div>
              </div>
           )}
@@ -118,7 +141,7 @@ const AIAnalyst: React.FC<AIAnalystProps> = ({ trends }) => {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyPress}
-              placeholder="Ask for a weekly summary, viral factors, or content ideas..."
+              placeholder="询问关于趋势规律、爆火原因或内容策略..."
               className="w-full bg-black/50 text-white placeholder-slate-500 border border-white/10 rounded-full py-4 pl-6 pr-14 focus:outline-none focus:ring-2 focus:ring-douyin-cyan/50 focus:border-transparent transition-all shadow-inner"
             />
             <button

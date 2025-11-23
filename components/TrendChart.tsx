@@ -2,14 +2,15 @@
 import React, { useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { TrendItem, ClusterCategory } from '../types';
-import { Bot, LayoutGrid, BarChart2, Loader2, RefreshCw, Layers } from 'lucide-react';
-import { clusterTrendsWithAI } from '../services/geminiService';
+import { Bot, LayoutGrid, BarChart2, Loader2, Layers, Lock, Key } from 'lucide-react';
+import { clusterTrendsWithAI } from '../services/deepseekService';
 
 interface TrendChartProps {
   trends: TrendItem[];
+  onRequestKey: () => void;
 }
 
-const TrendChart: React.FC<TrendChartProps> = ({ trends }) => {
+const TrendChart: React.FC<TrendChartProps> = ({ trends, onRequestKey }) => {
   const [viewMode, setViewMode] = useState<'chart' | 'cluster'>('chart');
   const [clusters, setClusters] = useState<ClusterCategory[]>([]);
   const [isClustering, setIsClustering] = useState(false);
@@ -35,7 +36,11 @@ const TrendChart: React.FC<TrendChartProps> = ({ trends }) => {
       const result = await clusterTrendsWithAI(trends);
       setClusters(result);
       setHasClustered(true);
-    } catch (error) {
+    } catch (error: any) {
+      if (error.message === "MISSING_KEY") {
+          // Stay in cluster mode but show lock screen
+          onRequestKey();
+      }
       console.error("Failed to cluster", error);
     } finally {
       setIsClustering(false);
@@ -52,13 +57,13 @@ const TrendChart: React.FC<TrendChartProps> = ({ trends }) => {
         <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 gap-4">
             <div>
                 <h2 className="text-3xl font-bold text-white flex items-center gap-2">
-                    Deep Analysis
-                    {viewMode === 'cluster' && <span className="text-xs bg-douyin-red px-2 py-1 rounded text-white">AI Powered</span>}
+                    深度趋势分析
+                    {viewMode === 'cluster' && <span className="text-xs bg-douyin-red px-2 py-1 rounded text-white">DeepSeek V3</span>}
                 </h2>
                 <p className="text-slate-400 text-sm mt-1">
                     {viewMode === 'chart' 
-                        ? "Comparing heat values of the top 10 viral topics." 
-                        : "Semantic grouping of all 50 topics using Gemini AI."}
+                        ? "对比 Top 10 爆款话题的热度指数。" 
+                        : "使用 DeepSeek AI 对 50 个话题进行语义智能聚类。"}
                 </p>
             </div>
 
@@ -72,7 +77,7 @@ const TrendChart: React.FC<TrendChartProps> = ({ trends }) => {
                     }`}
                 >
                     <BarChart2 className="w-4 h-4 mr-2" />
-                    Heat Map
+                    热力分布
                 </button>
                 <button
                     onClick={handleClusterAnalysis}
@@ -83,7 +88,7 @@ const TrendChart: React.FC<TrendChartProps> = ({ trends }) => {
                     }`}
                 >
                     {isClustering ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Layers className="w-4 h-4 mr-2" />}
-                    Topic Clusters
+                    AI 话题聚类
                 </button>
             </div>
         </div>
@@ -110,7 +115,7 @@ const TrendChart: React.FC<TrendChartProps> = ({ trends }) => {
                                 <Tooltip 
                                     cursor={{fill: 'rgba(255,255,255,0.05)'}}
                                     contentStyle={{ backgroundColor: '#18181b', borderColor: '#333', color: '#fff' }}
-                                    formatter={(value: number) => [`${(value/10000).toFixed(1)}w`, 'Hot Value']}
+                                    formatter={(value: number) => [`${(value/10000).toFixed(1)}w`, '热度值']}
                                 />
                                 <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={20}>
                                     {chartData.map((entry, index) => (
@@ -122,20 +127,20 @@ const TrendChart: React.FC<TrendChartProps> = ({ trends }) => {
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
                         <div className="bg-douyin-card p-6 rounded-xl border border-white/5">
-                            <h3 className="text-slate-400 text-sm uppercase font-bold">Top Heat Score</h3>
+                            <h3 className="text-slate-400 text-sm uppercase font-bold">最高热度</h3>
                             <div className="text-3xl font-mono text-douyin-red mt-2">
                                 {(chartData[0]?.value / 10000).toFixed(1)}w
                             </div>
                         </div>
                         <div className="bg-douyin-card p-6 rounded-xl border border-white/5">
-                            <h3 className="text-slate-400 text-sm uppercase font-bold">Average Heat (Top 10)</h3>
+                            <h3 className="text-slate-400 text-sm uppercase font-bold">平均热度 (Top 10)</h3>
                             <div className="text-3xl font-mono text-white mt-2">
                                 {(chartData.reduce((acc, cur) => acc + cur.value, 0) / 10 / 10000).toFixed(1)}w
                             </div>
                         </div>
                         <div className="bg-douyin-card p-6 rounded-xl border border-white/5">
-                            <h3 className="text-slate-400 text-sm uppercase font-bold">Viral Factor</h3>
-                            <div className="text-3xl font-mono text-douyin-cyan mt-2">High</div>
+                            <h3 className="text-slate-400 text-sm uppercase font-bold">传播指数</h3>
+                            <div className="text-3xl font-mono text-douyin-cyan mt-2">极高</div>
                         </div>
                     </div>
                 </>
@@ -146,8 +151,8 @@ const TrendChart: React.FC<TrendChartProps> = ({ trends }) => {
                     {isClustering ? (
                         <div className="h-full flex flex-col items-center justify-center text-center py-20">
                             <Bot className="w-16 h-16 text-douyin-cyan animate-bounce mb-6" />
-                            <h3 className="text-2xl font-bold text-white mb-2">AI is Analyzing Trends...</h3>
-                            <p className="text-slate-400 max-w-md">Gemini is reading the top 50 topics and grouping them into semantic categories.</p>
+                            <h3 className="text-2xl font-bold text-white mb-2">DeepSeek 正在分析中...</h3>
+                            <p className="text-slate-400 max-w-md">模型正在读取 50 个热搜话题，并进行智能语义归类。</p>
                         </div>
                     ) : clusters.length > 0 ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in-up">
@@ -158,7 +163,7 @@ const TrendChart: React.FC<TrendChartProps> = ({ trends }) => {
                                         <div className="flex justify-between items-start mb-1">
                                             <h3 className="text-lg font-bold text-white group-hover:text-douyin-cyan transition-colors">{cluster.name}</h3>
                                             <span className="text-xs font-mono bg-black/50 px-2 py-1 rounded text-douyin-red">
-                                                {cluster.percentage}% Vol
+                                                {cluster.percentage}% 占比
                                             </span>
                                         </div>
                                         <p className="text-xs text-slate-400 line-clamp-1">{cluster.description}</p>
@@ -176,7 +181,7 @@ const TrendChart: React.FC<TrendChartProps> = ({ trends }) => {
                                                         {trend.word}
                                                     </p>
                                                     <p className="text-[10px] text-slate-600 font-mono mt-0.5">
-                                                        Heat: {formatNumber(trend.hot_value)}
+                                                        热度: {formatNumber(trend.hot_value)}
                                                     </p>
                                                 </div>
                                             </div>
@@ -185,16 +190,26 @@ const TrendChart: React.FC<TrendChartProps> = ({ trends }) => {
                                     
                                     {/* Footer */}
                                     <div className="p-3 bg-black/20 text-center text-[10px] text-slate-500 uppercase tracking-widest border-t border-white/5">
-                                        {cluster.trends.length} Topics
+                                        {cluster.trends.length} 个话题
                                     </div>
                                 </div>
                             ))}
                         </div>
                     ) : (
-                         // Fallback / Empty state if something fails but isn't loading
-                        <div className="flex flex-col items-center justify-center py-20 text-slate-500">
-                           <Bot className="w-12 h-12 mb-4 opacity-20" />
-                           <p>Analysis ready to start.</p>
+                         // Empty State / Missing Key State
+                        <div className="flex flex-col items-center justify-center py-20 text-slate-500 min-h-[50vh]">
+                           <Lock className="w-16 h-16 mb-4 text-douyin-red opacity-50" />
+                           <h3 className="text-xl font-bold text-white mb-2">AI 功能已锁定</h3>
+                           <p className="text-sm max-w-sm text-center mb-6">
+                               话题智能聚类分析需要配置 DeepSeek API Key。
+                           </p>
+                           <button 
+                             onClick={onRequestKey}
+                             className="flex items-center px-6 py-2 bg-douyin-card border border-white/20 hover:bg-white/10 rounded-full transition-all text-white font-medium"
+                           >
+                               <Key className="w-4 h-4 mr-2" />
+                               输入 API Key
+                           </button>
                         </div>
                     )}
                 </div>

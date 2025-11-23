@@ -3,23 +3,34 @@ import { GoogleGenAI } from "@google/genai";
 import { SYSTEM_INSTRUCTION } from '../constants';
 import { TrendItem, ClusterCategory } from "../types";
 
-const getClient = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey) {
-    console.error("API_KEY is missing");
-    return null;
+const LOCAL_STORAGE_KEY = 'gemini_api_key';
+
+export const getApiKey = (): string | null => {
+  // 1. Check Safe Process Env (Build time injection)
+  if (typeof process !== 'undefined' && process.env && process.env.API_KEY) {
+    return process.env.API_KEY;
   }
+  // 2. Check Local Storage (Runtime injection for static sites)
+  return localStorage.getItem(LOCAL_STORAGE_KEY);
+};
+
+export const saveApiKey = (key: string) => {
+  localStorage.setItem(LOCAL_STORAGE_KEY, key);
+};
+
+const getClient = () => {
+  const apiKey = getApiKey();
+  if (!apiKey) return null;
   return new GoogleGenAI({ apiKey });
 };
 
 export const analyzeTrendsWithAI = async (trends: TrendItem[], userQuery: string): Promise<string> => {
   const client = getClient();
-  if (!client) return "Configuration Error: API Key missing.";
+  if (!client) return "MISSING_KEY"; // Special signal to UI to prompt for key
 
   try {
     const model = client.models;
     
-    // Compress trend list for the prompt to save tokens, just top 20 for chat context
     const topTrends = trends.slice(0, 20).map(t => `${t.position}. ${t.word} (Heat: ${t.hot_value})`).join('\n');
 
     const prompt = `
@@ -42,18 +53,17 @@ Please provide a concise analysis.
     return response.text || "Analysis failed to generate.";
   } catch (error) {
     console.error("Gemini API Error:", error);
-    return "Unable to analyze trends at the moment. Please try again.";
+    return "Error: Unable to analyze trends. Please check your API Key or network connection.";
   }
 };
 
 export const clusterTrendsWithAI = async (trends: TrendItem[]): Promise<ClusterCategory[]> => {
   const client = getClient();
-  if (!client) throw new Error("API Key missing");
+  if (!client) throw new Error("MISSING_KEY");
 
   try {
     const model = client.models;
 
-    // We send all trends to get a full clustering
     const trendList = trends.map(t => `${t.position}. ${t.word}`).join('\n');
 
     const prompt = `
@@ -90,7 +100,6 @@ Do not return markdown code blocks. Just the JSON string.
 
     const result = JSON.parse(text);
     
-    // Map the AI response back to the original TrendItems
     const clusters: ClusterCategory[] = result.categories.map((cat: any, index: number) => {
       const matchedTrends = cat.trend_positions
         .map((pos: number) => trends.find(t => t.position === pos))
@@ -104,17 +113,15 @@ Do not return markdown code blocks. Just the JSON string.
         description: cat.description,
         trends: matchedTrends,
         totalHeat: totalHeat,
-        percentage: 0 // Will calculate below
+        percentage: 0
       };
     });
 
-    // Calculate percentages
     const grandTotalHeat = clusters.reduce((sum, c) => sum + c.totalHeat, 0);
     clusters.forEach(c => {
       c.percentage = Math.round((c.totalHeat / grandTotalHeat) * 100);
     });
 
-    // Sort clusters by total heat (importance)
     return clusters.sort((a, b) => b.totalHeat - a.totalHeat);
 
   } catch (error) {
